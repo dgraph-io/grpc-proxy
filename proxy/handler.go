@@ -6,7 +6,7 @@ package proxy
 import (
 	"io"
 
-	"github.com/mwitkow/grpc-proxy/proxy/codec"
+	"github.com/trusch/grpc-proxy/proxy/codec"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
