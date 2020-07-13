@@ -1,4 +1,4 @@
-module github.com/trusch/grpc-proxy
+module github.com/dgraph-io/grpc-proxy
 
 go 1.12
 
