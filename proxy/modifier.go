@@ -3,5 +3,9 @@
 
 package proxy
 
+import (
+	"github.com/dgraph-io/grpc-proxy/proxy/codec"
+)
+
 // ResponseModifier modifies the response before returning it to the client
-type ResponseModifier func()
+type ResponseModifier func(*codec.Frame)

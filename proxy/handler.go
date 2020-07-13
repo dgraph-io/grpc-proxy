@@ -81,7 +81,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
 	// Channels do not have to be closed, it is just a control flow mechanism, see
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
-	s2cErrChan := s.forwardServerToClient(serverStream, clientStream)
+	s2cErrChan := s.forwardServerToClient(serverStream, clientStream, s.modifier)
 	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
@@ -146,12 +146,13 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 	return ret
 }
 
-func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream) chan error {
+func (s *handler) forwardServerToClient(src grpc.ServerStream, dst grpc.ClientStream, modifier ResponseModifier) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &codec.Frame{}
 		for i := 0; ; i++ {
 			if err := src.RecvMsg(f); err != nil {
+				modifier(f)
 				ret <- err // this can be io.EOF which is happy case
 				break
 			}
