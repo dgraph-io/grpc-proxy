@@ -51,6 +51,11 @@ type Frame struct {
 // ProtoMessage tags a frame as valid proto message
 func (f *Frame) ProtoMessage() {}
 
+// Returns the frame payload
+func (f *Frame) GetPayload() []byte {
+	return f.payload
+}
+
 // Marshal implents the encoding.Codec interface method
 func (p *Proxy) Marshal(v interface{}) ([]byte, error) {
 	out, ok := v.(*Frame)
