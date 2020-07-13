@@ -5,8 +5,8 @@ import (
 
 	_ "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
-	codec "github.com/trusch/grpc-proxy/proxy/codec"
-	pb "github.com/trusch/grpc-proxy/testservice"
+	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
+	pb "github.com/dgraph-io/grpc-proxy/testservice"
 	"google.golang.org/grpc/encoding"
 )
 
