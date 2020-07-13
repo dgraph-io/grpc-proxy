@@ -26,7 +26,7 @@ var (
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director: director
+		director: director,
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -52,7 +52,7 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 func TransparentHandler(director StreamDirector, modifier ResponseModifier) grpc.StreamHandler {
 	streamer := &handler{
 		director: director, 
-		modifier: modifier
+		modifier: modifier,
 	}
 	return streamer.handler
 }
