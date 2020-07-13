@@ -47,13 +47,14 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector) grpc.StreamHandler {
-	streamer := &handler{director}
+func TransparentHandler(director StreamDirector, modifier ResponseModifier) grpc.StreamHandler {
+	streamer := &handler{director, modifier}
 	return streamer.handler
 }
 
 type handler struct {
 	director StreamDirector
+	modifier ResponseModifier
 }
 
 // handler is where the real magic of proxying happens.
