@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -26,7 +27,7 @@ var (
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director: director
+		director: director,
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -49,10 +50,11 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, modifier ResponseModifier) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, modifier ResponseModifier, headerCb func(md metadata.MD)) grpc.StreamHandler {
 	streamer := &handler{
-		director: director, 
-		modifier: modifier
+		director: director,
+		modifier: modifier,
+		headerCb: headerCb,
 	}
 	return streamer.handler
 }
@@ -60,6 +62,7 @@ func TransparentHandler(director StreamDirector, modifier ResponseModifier) grpc
 type handler struct {
 	director StreamDirector
 	modifier ResponseModifier
+	headerCb func(md metadata.MD)
 }
 
 // handler is where the real magic of proxying happens.
@@ -78,11 +81,13 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	}
 
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
+	var header metadata.MD
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()), grpc.Header(&header))
 	if err != nil {
 		return err
 	}
+
 	// Explicitly *do not close* s2cErrChan and c2sErrChan, otherwise the select below will not terminate.
 	// Channels do not have to be closed, it is just a control flow mechanism, see
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
@@ -112,6 +117,10 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			// c2sErr will contain RPC error from client code. If not io.EOF return the RPC error as server stream error.
 			if c2sErr != io.EOF {
 				return c2sErr
+			}
+			// Call the headerCb once the request is finished.
+			if s.headerCb != nil {
+				s.headerCb(header)
 			}
 			return nil
 		}
