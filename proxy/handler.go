@@ -50,19 +50,19 @@ func RegisterService(server *grpc.Server, director StreamDirector, serviceName s
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, modifier ResponseModifier, headerCb func(md metadata.MD)) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, modifier ResponseModifier, headerModifer func(md metadata.MD) metadata.MD) grpc.StreamHandler {
 	streamer := &handler{
-		director: director,
-		modifier: modifier,
-		headerCb: headerCb,
+		director:      director,
+		modifier:      modifier,
+		headerModifer: headerModifer,
 	}
 	return streamer.handler
 }
 
 type handler struct {
-	director StreamDirector
-	modifier ResponseModifier
-	headerCb func(md metadata.MD)
+	director      StreamDirector
+	modifier      ResponseModifier
+	headerModifer func(md metadata.MD) metadata.MD
 }
 
 // handler is where the real magic of proxying happens.
@@ -81,9 +81,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	}
 
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
-	var header metadata.MD
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()), grpc.Header(&header))
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
 	if err != nil {
 		return err
 	}
@@ -92,7 +91,7 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 	// Channels do not have to be closed, it is just a control flow mechanism, see
 	// https://groups.google.com/forum/#!msg/golang-nuts/pZwdYRGxCIk/qpbHxRRPJdUJ
 	s2cErrChan := s.forwardServerToClient(serverStream, clientStream, s.modifier)
-	c2sErrChan := s.forwardClientToServer(clientStream, serverStream)
+	c2sErrChan := s.forwardClientToServer(clientStream, serverStream, s.headerModifer)
 	// We don't know which side is going to stop sending first, so we need a select between the two.
 	for i := 0; i < 2; i++ {
 		select {
@@ -118,17 +117,13 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 			if c2sErr != io.EOF {
 				return c2sErr
 			}
-			// Call the headerCb once the request is finished.
-			if s.headerCb != nil {
-				s.headerCb(header)
-			}
 			return nil
 		}
 	}
 	return status.Errorf(codes.Internal, "gRPC proxying should never reach this stage.")
 }
 
-func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream) chan error {
+func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerStream, headerModifer func(md metadata.MD) metadata.MD) chan error {
 	ret := make(chan error, 1)
 	go func() {
 		f := &codec.Frame{}
@@ -145,6 +140,9 @@ func (s *handler) forwardClientToServer(src grpc.ClientStream, dst grpc.ServerSt
 				if err != nil {
 					ret <- err
 					break
+				}
+				if headerModifer != nil {
+					md = headerModifer(md)
 				}
 				if err := dst.SendHeader(md); err != nil {
 					ret <- err
