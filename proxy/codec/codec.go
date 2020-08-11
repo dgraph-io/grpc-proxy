@@ -48,8 +48,8 @@ type Frame struct {
 	payload []byte
 }
 
-// Size returns the size of the frame.
-func (f *Frame) Size() int { return len(f.payload) }
+// GetPayload returns the payload.
+func (f *Frame) GetPayload() []byte { return f.payload }
 
 // ProtoMessage tags a frame as valid proto message
 func (f *Frame) ProtoMessage() {}
