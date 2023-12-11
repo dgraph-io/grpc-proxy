@@ -6,13 +6,14 @@ package proxy_test
 import (
 	"strings"
 
-	"github.com/dgraph-io/grpc-proxy/proxy"
-	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/dgraph-io/grpc-proxy/proxy"
+	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
 )
 
 var (
@@ -29,8 +30,10 @@ func ExampleRegisterService() {
 }
 
 func ExampleTransparentHandler() {
+	noOPModifier := func(frame *codec.Frame) {}
+	noHeaderModififer := func(md metadata.MD) metadata.MD { return metadata.MD{} }
 	grpc.NewServer(
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)))
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director, noOPModifier, noHeaderModififer)))
 }
 
 // Provide sa simple example of a director that shields internal services and dials a staging or production backend.

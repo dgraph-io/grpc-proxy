@@ -6,12 +6,13 @@ package proxy
 import (
 	"io"
 
-	"github.com/dgraph-io/grpc-proxy/proxy/codec"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/dgraph-io/grpc-proxy/proxy/codec"
 )
 
 var (
@@ -27,7 +28,9 @@ var (
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
 func RegisterService(server *grpc.Server, director StreamDirector, serviceName string, methodNames ...string) {
 	streamer := &handler{
-		director: director,
+		director:      director,
+		modifier:      func(frame *codec.Frame) {},
+		headerModifer: func(md metadata.MD) metadata.MD { return md },
 	}
 	fakeDesc := &grpc.ServiceDesc{
 		ServiceName: serviceName,
@@ -82,7 +85,8 @@ func (s *handler) handler(srv interface{}, serverStream grpc.ServerStream) error
 
 	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 	// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+	clientStream, err := grpc.NewClientStream(
+		clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, grpc.ForceCodecCallOption{Codec: &codec.Proxy{}})
 	if err != nil {
 		return err
 	}

@@ -11,9 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgraph-io/grpc-proxy/proxy"
-	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
-	pb "github.com/dgraph-io/grpc-proxy/testservice"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -24,6 +21,11 @@ import (
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+
+	"github.com/dgraph-io/grpc-proxy/proxy"
+	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
+	pb "github.com/dgraph-io/grpc-proxy/testservice"
 )
 
 const (
@@ -40,6 +42,7 @@ const (
 // asserting service is implemented on the server side and serves as a handler for stuff
 type assertingService struct {
 	t *testing.T
+	pb.UnimplementedTestServiceServer
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -118,7 +121,7 @@ func (s *ProxyHappySuite) TestPingEmptyCarriesClientMetadata() {
 	ctx := metadata.NewOutgoingContext(s.ctx(), metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
 	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out)
+	require.True(s.T(), proto.Equal(&pb.PingResponse{Value: pingDefaultValue, Counter: 42}, out))
 }
 
 func (s *ProxyHappySuite) TestPingEmpty_StressTest() {
@@ -134,7 +137,7 @@ func (s *ProxyHappySuite) TestPingCarriesServerHeadersAndTrailers() {
 	// This is an awkward calling convention... but meh.
 	out, err := s.testClient.Ping(s.ctx(), &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
 	require.NoError(s.T(), err, "Ping should succeed without errors")
-	require.Equal(s.T(), &pb.PingResponse{Value: "foo", Counter: 42}, out)
+	require.True(s.T(), proto.Equal(&pb.PingResponse{Value: "foo", Counter: 42}, out))
 	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
 	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
 }
@@ -230,8 +233,11 @@ func (s *ProxyHappySuite) SetupSuite() {
 		outCtx = metadata.NewOutgoingContext(outCtx, md.Copy())
 		return outCtx, s.serverClientConn, nil
 	}
+	noOPModifier := func(frame *codec.Frame) {}
+	noHeaderModififer := func(md metadata.MD) metadata.MD { return md }
 	s.proxy = grpc.NewServer(
-		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
+		grpc.ForceServerCodec(&codec.Proxy{}),
+		grpc.UnknownServiceHandler(proxy.TransparentHandler(director, noOPModifier, noHeaderModififer)),
 	)
 	// Ping handler is handled as an explicit registration and not as a TransparentHandler.
 	proxy.RegisterService(s.proxy, director,

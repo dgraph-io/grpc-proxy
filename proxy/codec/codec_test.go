@@ -3,11 +3,12 @@ package codec_test
 import (
 	"testing"
 
-	_ "github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/encoding"
+	"google.golang.org/protobuf/proto"
+
 	codec "github.com/dgraph-io/grpc-proxy/proxy/codec"
 	pb "github.com/dgraph-io/grpc-proxy/testservice"
-	"google.golang.org/grpc/encoding"
 )
 
 func TestCodec_ReadYourWrites(t *testing.T) {
@@ -48,5 +49,5 @@ func TestProtoCodec_ReadYourWrites(t *testing.T) {
 	err = proxyCd.Unmarshal(out2p1, p2)
 	require.NoError(t, err, "unmarshalling must go ok")
 
-	require.Equal(t, *p1, *p2)
+	require.True(t, proto.Equal(p1, p2))
 }
